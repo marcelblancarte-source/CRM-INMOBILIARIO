@@ -1,7 +1,7 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 type Team = {
   id: string
@@ -67,23 +67,4 @@ export default function TeamsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Equipos de Venta</h1>
-          <p className="text-sm text-white/40 mt-1">Administra los equipos de ventas.</p>
-        </div>
-        <button
-          onClick={openNew}
-          className="inline-flex items-center gap-2 rounded-lg bg-white text-black px-4 py-2 text-sm font-medium hover:bg-white/90 transition-all"
-        >
-          <span className="text-lg leading-none">+</span> Nuevo Equipo
-        </button>
-      </div>
-
-      {loading ? (
-        <p className="text-white/40 text-sm">Cargando equipos...</p>
-      ) : teams.length === 0 ? (
-        <div className="rounded-xl border border-white/10 p-12 text-center">
-          <p className="text-white/40 text-sm">No hay equipos registrados.</p>
-          <button onClick={openNew} className="mt-4 text-sm text-white underline">Crear el primero</button>
-        </div>
-      ) : (
-        <div className="grid
+          <h1 classN
