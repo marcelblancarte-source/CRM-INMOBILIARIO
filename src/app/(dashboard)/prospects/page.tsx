@@ -11,7 +11,7 @@ type Prospect = {
   email: string | null
   temperature: string | null
   created_at: string
-  users: { full_name: string | null } | { full_name: string | null }[] | null
+  users: any
 }
 
 const TEMP_BADGE: Record<string, { label: string; className: string }> = {
@@ -31,7 +31,6 @@ export default function ProspectsPage() {
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Form fields
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -46,8 +45,8 @@ export default function ProspectsPage() {
       .from('prospects')
       .select('id, full_name, phone, email, temperature, created_at, users(full_name)')
       .order('created_at', { ascending: false })
-    setProspects(data ?? [])
-    setFiltered(data ?? [])
+    setProspects((data as any) ?? [])
+    setFiltered((data as any) ?? [])
     setLoading(false)
   }
 
@@ -94,6 +93,12 @@ export default function ProspectsPage() {
     loadProspects()
   }
 
+  function getAdvisorName(users: any): string {
+    if (!users) return 'Sin asesor'
+    if (Array.isArray(users)) return users[0]?.full_name ? `Asesor: ${users[0].full_name}` : 'Sin asesor'
+    return users.full_name ? `Asesor: ${users.full_name}` : 'Sin asesor'
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -109,7 +114,6 @@ export default function ProspectsPage() {
         </button>
       </div>
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           type="text"
@@ -132,7 +136,6 @@ export default function ProspectsPage() {
         </select>
       </div>
 
-      {/* Lista */}
       {loading ? (
         <p className="text-white/40 text-sm">Cargando prospectos...</p>
       ) : filtered.length === 0 ? (
@@ -159,7 +162,7 @@ export default function ProspectsPage() {
                   {p.email && <p>✉️ {p.email}</p>}
                 </div>
                 <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs text-white/30">
-                  <span>{p.users?.full_name ? `Asesor: ${p.users.full_name}` : 'Sin asesor'}</span>
+                  <span>{getAdvisorName(p.users)}</span>
                   <span>{new Date(p.created_at).toLocaleDateString('es-MX')}</span>
                 </div>
               </div>
@@ -168,7 +171,6 @@ export default function ProspectsPage() {
         </div>
       )}
 
-      {/* Modal Nuevo Prospecto */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-6 space-y-4">
