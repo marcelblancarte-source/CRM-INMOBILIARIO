@@ -1,134 +1,277 @@
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
-export default async function ActivitiesPage() {
-    const supabase = await createClient()
+type Activity = {
+  id: string
+  type: string | null
+  description: string | null
+  scheduled_at: string | null
+  status: string | null
+  prospect_id: string | null
+  advisor_id: string | null
+  prospects: any
+  users: any
+}
 
-    // MOCK DATA PARA DEMOSTRACIÓN DEL ESPACIO MIENTRAS SE CONECTA A DB
-    const summary = {
-        pending: 12,
-        completed: 45,
-        overdue: 3,
-        noActivity7Days: 8 // Prospectos sin actividad programada en los últimos 7 días
-    }
+const TYPE_ICONS: Record<string, string> = {
+  call: '📞',
+  whatsapp: '✉️',
+  visit: '🏗️',
+  office_meeting: '🏢',
+  follow_up: '📅',
+}
 
-    const activities = [
-        { id: '1', type: 'Llamada telefónica', prospect: 'Roberto Gómez', description: 'Confirmar recepción de cotización enviada', date: '2023-11-26', time: '10:00', status: 'Pendiente', isOverdue: false, advisor: 'Ana Ramírez' },
-        { id: '2', type: 'Visita al desarrollo', prospect: 'Silvia Leticia', description: 'Visita programada a torre de amenidades', date: '2023-11-26', time: '16:30', status: 'Pendiente', isOverdue: false, advisor: 'Carlos Pérez' },
-        { id: '3', type: 'Cita en oficina', prospect: 'Mauricio Paz', description: 'Firma de apartado', date: '2023-11-24', time: '11:00', status: 'Pendiente', isOverdue: true, advisor: 'Ana Ramírez' },
-        { id: '4', type: 'Envío de información', prospect: 'Fernanda Ríos', description: 'Enviar planos de PB y precios actualizados', date: '2023-11-25', time: '18:00', status: 'Realizada', isOverdue: false, advisor: 'Carlos Pérez' },
-    ]
+const TYPE_LABELS: Record<string, string> = {
+  call: 'Llamada telefónica',
+  whatsapp: 'WhatsApp / Correo',
+  visit: 'Visita al desarrollo',
+  office_meeting: 'Cita en oficina',
+  follow_up: 'Seguimiento general',
+}
 
-    const getActivityIcon = (type: string) => {
-        switch (type) {
-            case 'Llamada telefónica': return '📞'
-            case 'Envío de información': return '✉️'
-            case 'Visita al desarrollo': return '🏗️'
-            case 'Cita en oficina': return '🏢'
-            default: return '📅'
-        }
-    }
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendiente',
+  done: 'Realizada',
+  no_answer: 'No contestó',
+  rescheduled: 'Reprogramada',
+}
 
-    return (
-        <div className="space-y-6">
-            <div className="flex flex-col justify-between space-y-4 sm:flex-row sm:items-center sm:space-y-0">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Agenda y Alertas</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Monitor de actividades de seguimiento por asesor y equipo.
-                    </p>
-                </div>
-                <div className="flex gap-2">
-                    {/* Botón para registrar nueva actividad */}
-                    <button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-blue-600 text-white hover:bg-blue-700 h-10 py-2 px-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4"><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M12 18h.01" /><path d="M16 18h.01" /></svg>
-                        Agendar Actividad
-                    </button>
-                </div>
-            </div>
+export default function ActivitiesPage() {
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [prospects, setProspects] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-            {/* Indicadores Resumen Arriba */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800 flex flex-col items-center justify-center text-center">
-                    <h3 className="text-sm font-medium tracking-tight text-gray-500 mb-2">Pendientes Totales</h3>
-                    <div className="text-3xl font-bold text-gray-900 dark:text-white">{summary.pending}</div>
-                </div>
-                <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800 flex flex-col items-center justify-center text-center ring-1 ring-red-500/20 bg-red-50/50 dark:bg-red-900/10">
-                    <h3 className="text-sm font-medium tracking-tight text-red-600 dark:text-red-400 mb-2 flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
-                        Actividades Vencidas
-                    </h3>
-                    <div className="text-3xl font-bold text-red-600 dark:text-red-500">{summary.overdue}</div>
-                </div>
-                <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800 flex flex-col items-center justify-center text-center">
-                    <h3 className="text-sm font-medium tracking-tight text-gray-500 mb-2">Realizadas Totales</h3>
-                    <div className="text-3xl font-bold text-gray-900 dark:text-white">{summary.completed}</div>
-                </div>
-                <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-900 dark:border-gray-800 flex flex-col items-center justify-center text-center ring-1 ring-orange-500/20 bg-orange-50/50 dark:bg-orange-900/10">
-                    <h3 className="text-sm font-medium tracking-tight text-orange-600 dark:text-orange-400 mb-2 text-center">
-                        Prospectos sin contacto (&gt;7d)
-                    </h3>
-                    <div className="text-3xl font-bold text-orange-600 dark:text-orange-500">{summary.noActivity7Days}</div>
-                </div>
-            </div>
+  const [type, setType] = useState('call')
+  const [prospectId, setProspectId] = useState('')
+  const [description, setDescription] = useState('')
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('')
 
-            <div className="rounded-md border bg-white dark:border-gray-800 dark:bg-gray-900">
-                {/* Table/List view of activities */}
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="border-b bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
-                            <tr>
-                                <th className="px-6 py-4 font-medium">Actividad</th>
-                                <th className="px-6 py-4 font-medium">Prospecto</th>
-                                <th className="px-6 py-4 font-medium">Asesor</th>
-                                <th className="px-6 py-4 font-medium">Fecha y Hora</th>
-                                <th className="px-6 py-4 font-medium">Estatus</th>
-                                <th className="px-6 py-4 font-medium text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                            {activities.map((activity) => (
-                                <tr key={activity.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${activity.isOverdue ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
-                                    <td className="px-6 py-4">
-                                        <div className="font-medium text-gray-900 dark:text-white flex items-center">
-                                            <span className="mr-2">{getActivityIcon(activity.type)}</span>
-                                            {activity.type}
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-1 max-w-md truncate">{activity.description}</div>
-                                    </td>
-                                    <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">
-                                        <Link href={`/prospects`}>{activity.prospect}</Link>
-                                    </td>
-                                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{activity.advisor}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`font-medium ${activity.isOverdue ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                                            {activity.date} — {activity.time}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {activity.isOverdue ? (
-                                            <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-900/40 dark:text-red-400">
-                                                Vencida
-                                            </span>
-                                        ) : (
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${activity.status === 'Realizada' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}>
-                                                {activity.status}
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        {activity.status === 'Pendiente' && (
-                                            <button className="text-sm font-medium text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
-                                                Completar
-                                            </button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+  const supabase = createClient()
+  const now = new Date()
+
+  async function loadData() {
+    setLoading(true)
+    const [{ data: activitiesData }, { data: prospectsData }] = await Promise.all([
+      supabase
+        .from('activities')
+        .select('*, prospects(full_name), users(full_name)')
+        .order('scheduled_at', { ascending: true }),
+      supabase.from('prospects').select('id, full_name').order('full_name'),
+    ])
+    setActivities((activitiesData as any) ?? [])
+    setProspects(prospectsData ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  function isOverdue(activity: Activity) {
+    if (activity.status !== 'pending') return false
+    if (!activity.scheduled_at) return false
+    return new Date(activity.scheduled_at) < now
+  }
+
+  const pending = activities.filter(a => a.status === 'pending' && !isOverdue(a)).length
+  const overdue = activities.filter(a => isOverdue(a)).length
+  const done = activities.filter(a => a.status === 'done').length
+
+  async function saveActivity() {
+    if (!prospectId || !scheduledDate) return
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('activities').insert({
+      type,
+      description: description || null,
+      scheduled_at: `${scheduledDate}T${scheduledTime || '09:00'}:00`,
+      status: 'pending',
+      prospect_id: prospectId,
+      advisor_id: user?.id,
+    })
+    setSaving(false)
+    setShowModal(false)
+    loadData()
+  }
+
+  async function markDone(id: string) {
+    await supabase.from('activities').update({ status: 'done' }).eq('id', id)
+    loadData()
+  }
+
+  function openNew() {
+    setType('call')
+    setProspectId('')
+    setDescription('')
+    setScheduledDate('')
+    setScheduledTime('')
+    setShowModal(true)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Agenda y Alertas</h1>
+          <p className="text-sm text-white/40 mt-1">Monitor de actividades de seguimiento.</p>
         </div>
-    )
+        <button
+          onClick={openNew}
+          className="inline-flex items-center gap-2 rounded-lg bg-white text-black px-4 py-2 text-sm font-medium hover:bg-white/90 transition-all"
+        >
+          <span className="text-lg leading-none">+</span> Agendar Actividad
+        </button>
+      </div>
+
+      {/* Resumen */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border border-white/10 bg-zinc-950 p-6 text-center">
+          <p className="text-xs text-white/40 uppercase tracking-widest mb-2">Pendientes</p>
+          <p className="text-3xl font-bold">{pending}</p>
+        </div>
+        <div className="rounded-xl border border-red-500/20 bg-red-900/10 p-6 text-center">
+          <p className="text-xs text-red-400 uppercase tracking-widest mb-2">⚠️ Vencidas</p>
+          <p className="text-3xl font-bold text-red-400">{overdue}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-zinc-950 p-6 text-center">
+          <p className="text-xs text-white/40 uppercase tracking-widest mb-2">Realizadas</p>
+          <p className="text-3xl font-bold text-green-400">{done}</p>
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div className="rounded-xl border border-white/10 overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead className="border-b border-white/10 bg-zinc-950">
+            <tr>
+              <th className="px-6 py-4 text-xs uppercase tracking-widest text-white/40 font-medium">Actividad</th>
+              <th className="px-6 py-4 text-xs uppercase tracking-widest text-white/40 font-medium">Prospecto</th>
+              <th className="px-6 py-4 text-xs uppercase tracking-widest text-white/40 font-medium">Asesor</th>
+              <th className="px-6 py-4 text-xs uppercase tracking-widest text-white/40 font-medium">Fecha y Hora</th>
+              <th className="px-6 py-4 text-xs uppercase tracking-widest text-white/40 font-medium">Estatus</th>
+              <th className="px-6 py-4 text-xs uppercase tracking-widest text-white/40 font-medium text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {loading ? (
+              <tr><td colSpan={6} className="px-6 py-8 text-center text-white/40 text-sm">Cargando actividades...</td></tr>
+            ) : activities.length === 0 ? (
+              <tr><td colSpan={6} className="px-6 py-8 text-center text-white/40 text-sm">No hay actividades registradas.</td></tr>
+            ) : (
+              activities.map((activity) => {
+                const overdue = isOverdue(activity)
+                const prospectName = Array.isArray(activity.prospects) ? activity.prospects[0]?.full_name : activity.prospects?.full_name
+                const advisorName = Array.isArray(activity.users) ? activity.users[0]?.full_name : activity.users?.full_name
+                const scheduledDate = activity.scheduled_at ? new Date(activity.scheduled_at) : null
+                return (
+                  <tr key={activity.id} className={`transition-all ${overdue ? 'bg-red-900/10' : 'hover:bg-white/5'}`}>
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-white flex items-center gap-2">
+                        <span>{TYPE_ICONS[activity.type ?? ''] ?? '📅'}</span>
+                        {TYPE_LABELS[activity.type ?? ''] ?? activity.type}
+                      </div>
+                      {activity.description && (
+                        <div className="text-xs text-white/40 mt-1 max-w-xs truncate">{activity.description}</div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {prospectName ? (
+                        <Link href={`/prospects/${activity.prospect_id}`} className="text-white/70 hover:text-white transition-all">
+                          {prospectName}
+                        </Link>
+                      ) : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-white/50">{advisorName ?? '—'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`font-medium ${overdue ? 'text-red-400' : 'text-white'}`}>
+                        {scheduledDate ? scheduledDate.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        overdue ? 'bg-red-900/40 text-red-400' :
+                        activity.status === 'done' ? 'bg-green-900/40 text-green-400' :
+                        'bg-zinc-800 text-zinc-300'
+                      }`}>
+                        {overdue ? 'Vencida' : STATUS_LABELS[activity.status ?? ''] ?? activity.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {activity.status === 'pending' && (
+                        <button onClick={() => markDone(activity.id)} className="text-xs text-green-400 hover:text-green-300 transition-all">
+                          Completar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-6 space-y-4">
+            <h2 className="text-lg font-bold">Nueva Actividad</h2>
+
+            <div>
+              <label className="text-xs text-white/40 uppercase tracking-widest">Tipo</label>
+              <select value={type} onChange={e => setType(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30">
+                {Object.entries(TYPE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-white/40 uppercase tracking-widest">Prospecto *</label>
+              <select value={prospectId} onChange={e => setProspectId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30">
+                <option value="">Seleccionar prospecto</option>
+                {prospects.map(p => (
+                  <option key={p.id} value={p.id}>{p.full_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-white/40 uppercase tracking-widest">Descripción</label>
+              <input value={description} onChange={e => setDescription(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30"
+                placeholder="Breve descripción de la actividad" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-white/40 uppercase tracking-widest">Fecha *</label>
+                <input value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} type="date"
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30" />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 uppercase tracking-widest">Hora</label>
+                <input value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} type="time"
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30" />
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-white/50 hover:text-white">Cancelar</button>
+              <button onClick={saveActivity} disabled={saving}
+                className="px-4 py-2 text-sm bg-white text-black rounded-lg hover:bg-white/90 disabled:opacity-50">
+                {saving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
