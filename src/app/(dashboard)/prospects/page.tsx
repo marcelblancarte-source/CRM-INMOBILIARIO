@@ -31,11 +31,13 @@ type Prospect = {
 
 type Team = { id: string; name: string }
 type User = { id: string; full_name: string; team_id: string | null }
+type Project = { id: string; name: string }
 
 export default function ProspectsPage() {
   const [prospects, setProspects] = useState<Prospect[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterTeam, setFilterTeam] = useState('')
@@ -43,6 +45,7 @@ export default function ProspectsPage() {
   const [filterUrgency, setFilterUrgency] = useState('all')
   const [selected, setSelected] = useState<Prospect | null>(null)
   const [notes, setNotes] = useState<any[]>([])
+  const [prospectProjects, setProspectProjects] = useState<string[]>([])
   const [noteText, setNoteText] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -52,14 +55,16 @@ export default function ProspectsPage() {
 
   async function loadData() {
     setLoading(true)
-    const [{ data: prospectsData }, { data: teamsData }, { data: usersData }] = await Promise.all([
+    const [{ data: prospectsData }, { data: teamsData }, { data: usersData }, { data: projectsData }] = await Promise.all([
       supabase.from('prospects').select('*').order('created_at', { ascending: false }),
       supabase.from('teams').select('id, name').order('name'),
       supabase.from('users').select('id, full_name, team_id').order('full_name'),
+      supabase.from('projects').select('id, name').eq('status', 'active').order('name'),
     ])
     setProspects((prospectsData as any) ?? [])
     setTeams(teamsData ?? [])
     setUsers(usersData ?? [])
+    setProjects(projectsData ?? [])
     setLoading(false)
   }
 
@@ -74,16 +79,26 @@ export default function ProspectsPage() {
     setNotes(data ?? [])
   }
 
+  async function loadProspectProjects(prospectId: string) {
+    const { data } = await supabase
+      .from('prospect_projects')
+      .select('project_id')
+      .eq('prospect_id', prospectId)
+    setProspectProjects((data ?? []).map((pp: any) => pp.project_id))
+  }
+
   function openDrawer(prospect: Prospect) {
     setSelected(prospect)
     setNoteText('')
     setShowDeleteConfirm(false)
     loadNotes(prospect.id)
+    loadProspectProjects(prospect.id)
   }
 
   function closeDrawer() {
     setSelected(null)
     setNotes([])
+    setProspectProjects([])
     loadData()
   }
 
@@ -91,6 +106,24 @@ export default function ProspectsPage() {
     await supabase.from('prospects').update({ [field]: value }).eq('id', id)
     setProspects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, [field]: value } : prev)
+  }
+
+  async function toggleProject(projectId: string) {
+    if (!selected) return
+    if (prospectProjects.includes(projectId)) {
+      await supabase.from('prospect_projects')
+        .delete()
+        .eq('prospect_id', selected.id)
+        .eq('project_id', projectId)
+      setProspectProjects(prev => prev.filter(id => id !== projectId))
+    } else {
+      await supabase.from('prospect_projects').insert({
+        prospect_id: selected.id,
+        project_id: projectId,
+        temperature: selected.temperature ?? 'cold',
+      })
+      setProspectProjects(prev => [...prev, projectId])
+    }
   }
 
   async function saveNote() {
@@ -113,13 +146,12 @@ export default function ProspectsPage() {
   async function deleteProspect() {
     if (!selected) return
     await supabase.from('prospect_notes').delete().eq('prospect_id', selected.id)
+    await supabase.from('prospect_projects').delete().eq('prospect_id', selected.id)
     await supabase.from('prospects').delete().eq('id', selected.id)
     closeDrawer()
   }
 
-  const filteredAdvisors = filterTeam
-    ? users.filter(u => u.team_id === filterTeam)
-    : users
+  const filteredAdvisors = filterTeam ? users.filter(u => u.team_id === filterTeam) : users
 
   const filtered = prospects.filter(p => {
     if (search && !p.full_name?.toLowerCase().includes(search.toLowerCase())) return false
@@ -349,6 +381,22 @@ export default function ProspectsPage() {
               </div>
             </div>
 
+            {/* Proyectos de interés */}
+            <div>
+              <label className="text-[9px] uppercase tracking-widest text-white/30 block mb-2">Proyectos de Interés</label>
+              <div className="flex flex-wrap gap-2">
+                {projects.map(project => {
+                  const isLinked = prospectProjects.includes(project.id)
+                  return (
+                    <button key={project.id} onClick={() => toggleProject(project.id)}
+                      className={`px-3 py-1 text-[10px] uppercase tracking-wider border transition-all ${isLinked ? 'border-purple-500 bg-purple-500/20 text-purple-300' : 'border-white/10 text-white/30 hover:border-white/30 hover:text-white'}`}>
+                      {isLinked && '✓ '}{project.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Asignación */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -383,8 +431,7 @@ export default function ProspectsPage() {
               <label className="text-[9px] uppercase tracking-widest text-white/30 block mb-2">Estatus Comercial</label>
               <div className="grid grid-cols-5 gap-1">
                 {Object.entries(TEMP_CONFIG).map(([key, val]) => (
-                  <button key={key}
-                    onClick={() => updateField(selected.id, 'temperature', key)}
+                  <button key={key} onClick={() => updateField(selected.id, 'temperature', key)}
                     className={`py-1.5 text-[10px] uppercase tracking-wider border transition-all ${selected.temperature === key ? 'border-white bg-white text-black' : 'border-white/10 text-white/40 hover:text-white hover:border-white/30'}`}>
                     {val.label}
                   </button>
